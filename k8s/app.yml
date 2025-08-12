@@ -1,0 +1,111 @@
+# k8s/app-deployment.yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nestjs-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nestjs-app
+  template:
+    metadata:
+      labels:
+        app: nestjs-app
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        runAsNonRoot: true
+      containers:
+      - name: nestjs-app
+        image: YOUR_DOCKER_REGISTRY/test:latest
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+        ports:
+        - containerPort: 3000
+        envFrom:
+        - configMapRef:
+            name: app-config
+        - secretRef:
+            name: app-secrets
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "150Mi"
+          limits:
+            cpu: "200m"
+            memory: "250Mi"
+        livenessProbe:
+          httpGet:
+            path: /redis
+            port: 3000
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /redis
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+---
+# k8s/app-service.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: nestjs-app-service
+spec:
+  selector:
+    app: nestjs-app
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 3000
+---
+# k8s/app-ingress.yml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nestjs-app-ingress
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: nestjs-app-service
+            port:
+              number: 80
+---
+# k8s/app-config.yml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+---
+# k8s/app-hpa.yml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: nestjs-app-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: nestjs-app
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 80
