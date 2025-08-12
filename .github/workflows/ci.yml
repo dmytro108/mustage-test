@@ -59,13 +59,13 @@ jobs:
     - name: Test API endpoint
       run: |
         echo "Waiting for Ingress to be ready..."
-        sleep 60
+        sleep 20
         INGRESS_IP=$(kubectl get ingress nestjs-app-ingress -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
         if [ -z "$INGRESS_IP" ]; then
           echo "Failed to get Ingress IP. Trying Node IP..."
           INGRESS_IP=$(kubectl get node -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
         fi
-        
+
         if [ -z "$INGRESS_IP" ]; then
           echo "Failed to get any IP."
           exit 1
