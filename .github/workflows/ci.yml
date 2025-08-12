@@ -37,5 +37,6 @@ jobs:
 
     - name: Update and Deploy to Kubernetes
       run: |
+        sed -i "s|image: YOUR_DOCKER_REGISTRY/test:latest|image: ${{ secrets.DOCKER_USERNAME }}/test:latest|g" k8s/app.yml
         sed -i "s/REDIS_PASSWORD: \"\"/REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}/g" k8s/secret.yml
         kubectl apply -f k8s/
