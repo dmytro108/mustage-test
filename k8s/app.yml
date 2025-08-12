@@ -48,7 +48,7 @@ spec:
           httpGet:
             path: /redis
             port: 3000
-          initialDelaySeconds: 5
+          initialDelaySeconds: 15
           periodSeconds: 10
 ---
 # k8s/app-service.yml
