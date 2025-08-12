@@ -24,12 +24,12 @@ jobs:
 
     - name: Build image
       run: |
-        docker build -t "$IMAGE_NAME:pr-${{ steps.branch-name.outputs.current_branch }}" .
+        docker build -t "${{ env.IMAGE_NAME }}:pr-${{ steps.branch-name.outputs.current_branch }}" .
 
     - name: Run Trivy vulnerability scanner
       uses: aquasecurity/trivy-action@master
       with:
-        image-ref: $IMAGE_NAME:pr-${{ steps.branch-name.outputs.current_branch }}
+        image-ref: ${{ env.IMAGE_NAME }}:pr-${{ steps.branch-name.outputs.current_branch }}
         format: 'table'
         exit-code: '1'
         ignore-unfixed: true
@@ -46,14 +46,14 @@ jobs:
     - name: Push image to registry
       if: success()
       run: |
-        docker push $IMAGE_NAME:pr-${{ steps.branch-name.outputs.current_branch }}
+        docker push ${{ env.IMAGE_NAME }}:pr-${{ steps.branch-name.outputs.current_branch }}
 
     - name: Create k8s Kind Cluster
       uses: helm/kind-action@v1.5.0
 
     - name: Deploy to k8s
       run: |
-        sed -i "s|image: YOUR_DOCKER_REGISTRY/test:latest|image: $IMAGE_NAME:pr-${{ steps.branch-name.outputs.current_branch }}|g" k8s/app.yml
+        sed -i "s|image: YOUR_DOCKER_REGISTRY/test:latest|image: ${{ env.IMAGE_NAME }}:pr-${{ steps.branch-name.outputs.current_branch }}|g" k8s/app.yml
         kubectl apply -f k8s/
 
     - name: Test API endpoint
