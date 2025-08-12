@@ -1,144 +1,106 @@
-# DevOps Тестове Завдання: CI/CD для NestJS + Redis + Kubernetes
+# NestJS Redis K8s DevOps Assignment
 
-**Час виконання:** 2 години
+## Project Description
 
-## Опис Завдання
+This project is a simple NestJS application created for a DevOps test assignment. The main goal is to build a full CI/CD pipeline to deploy the application to a Kubernetes cluster. The application has a single GET `/redis` endpoint that checks the connection to a Redis instance and returns its status.
 
-Вам надано простий додаток NestJS з одним ендпоінтом `/redis`, який перевіряє підключення до Redis і повертає true/false. Потрібно налаштувати повний CI/CD pipeline та розгорнути додаток у Kubernetes.
+## Design Decisions
 
-## Структура Додатку
+- **Modular Design**: The application is structured into modules to separate concerns. The Redis functionality is encapsulated within its own service (`RedisService`), making it reusable and easier to maintain.
+- **Configuration Management**: In Kubernetes, configuration is managed using `ConfigMaps` for non-sensitive data and `Secrets` for sensitive data like passwords. The application is configured to consume these resources directly.
+- **Dependency Injection**: NestJS's built-in dependency injection is used to manage the dependencies between components, such as injecting the `RedisService` into the `AppService`.
 
-```
-nestjs-app/
-├── src/
-│   ├── redis/
-│   │   └── redis.service.ts
-│   ├── app.controller.ts
-│   ├── app.module.ts
-│   ├── app.service.ts
-│   └── main.ts
-├── package.json
-├── tsconfig.json
-```
+## Kubernetes Architecture
 
-### Ендпоінт Додатку
+The following diagram illustrates the Kubernetes cluster architecture:
 
-- **GET /redis** - повертає `{"status": true/false}` залежно від стану підключення до Redis
+```mermaid
+graph TD
+    subgraph "Kubernetes Cluster"
+        ingress(Ingress) --> app-service(Service)
+        app-service --> app-deployment(Deployment)
+        app-employment --> redis-service(Service)
+        redis-service --> redis-deployment(Deployment)
+        app-deployment --> secret(Secret)
+    end
 
-## Вимоги
+    subgraph "CI/CD Pipeline"
+        github(GitHub) --> actions(GitHub Actions)
+        actions --> docker(Docker Hub)
+        actions --> kubernetes(Kubernetes Cluster)
+    end
 
-### 1. Dockerfile
-
-- [ ] Створити оптимізований багатоетапний Dockerfile
-- [ ] Використовувати офіційні базові образи
-- [ ] Мінімізувати розмір кінцевого образу
-- [ ] Налаштувати користувача без root прав
-- [ ] Правильно обробити залежності Node.js
-- [ ] Використовувати .dockerignore
-
-### 2. CI/CD Pipeline
-
-Налаштувати pipeline для GitHub Actions або GitLab CI з етапами:
-
-- [ ] Збірка Docker образу
-- [ ] Push образу в registry
-- [ ] Деплой у Kubernetes
-- [ ] Використання змінних середовища та secrets
-
-### 3. Kubernetes Маніфести
-
-- [ ] Deployment, Service, Ingress для NestJS додатку
-- [ ] Deployment, Service для Redis
-- [ ] ConfigMap, Secrets для конфігурації
-- [ ] Правильні labels та selectors
-- [ ] Resource limits та requests
-
-### 4. Інтеграція з Redis
-
-- [ ] Redis розгорнуто у кластері
-- [ ] Додаток успішно підключається до Redis
-- [ ] Ендпоінт `/redis` працює коректно
-
-### 5. Secrets та Безпека
-
-- [ ] Використання Kubernetes Secrets для чутливих даних
-- [ ] Пароль Redis зберігається в Secret
-- [ ] NetworkPolicy для обмеження трафіку (бонус)
-- [ ] SecurityContext у pod'ах
-- [ ] Не використовуються root права в контейнерах
-
-### 6. Додаткові Вимоги
-
-- [ ] Детальний README з інструкціями по налаштуванню
-- [ ] Health checks та Autoscaler
-- [ ] Коментарі в коді та маніфестах
-- [ ] Моніторинг з Prometheus/Grafana
-
-## Критерії Оцінювання
-
-| Компонент         | Відмінно                                                  | Добре                           | Задовільно                 | Незадовільно            |
-| ----------------- | --------------------------------------------------------- | ------------------------------- | -------------------------- | ----------------------- |
-| **Dockerfile**    | Багатоетапний, оптимізований, найкращі безпекові практики | Робочий, частково оптимізований | Базовий робочий Dockerfile | Не працює або відсутній |
-| **CI/CD**         | Повний pipeline з тестами, скануванням, автодеплоєм       | Pipeline з основними етапами    | Базовий pipeline збірки    | Не працює               |
-| **K8s Маніфести** | Повні, оптимізовані, з best practices                     | Коректні основні компоненти     | Базові робочі маніфести    | Не працює               |
-| **Документація**  | Детальна, з прикладами, діаграмами                        | Гарна з основними інструкціями  | Базова документація        | Відсутня або неповна    |
-
-## Що Потрібно Надати
-
-1. **Репозиторій з кодом** (GitHub)
-2. **README.md** з детальними інструкціями
-3. **Архітектурна діаграма** (може бути проста схема)
-4. **Демонстрація роботи** - скріншоти або відео
-5. **Пояснення рішень** - чому обрали саме такий підхід
-
-## Додаткові Інструкції
-
-### Тестове Середовище
-
-- Використовуйте minikube, kind або Docker Desktop для локального тестування
-- Якщо є доступ до хмарного кластеру - можете використовувати його
-- Всі рішення повинні бути відтворюваними
-
-### Registry
-
-- Можете використовувати Docker Hub, GitHub Container Registry або будь-який інший публічний registry
-- Не забудьте про теги версій
-
-### Моніторинг Розгортання
-
-Ці команди повинні працювати для перевірки:
-
-```bash
-kubectl get pods
-kubectl get services
-curl http://domain.tld/redis
+    style app-deployment fill:#cce5ff,stroke:#333,stroke-width:2px
+    style redis-deployment fill:#ffcccc,stroke:#333,stroke-width:2px
 ```
 
-## Розподіл Часу
+## Deployment Instructions
 
-- **30 хв** - Аналіз додатку, планування архітектури
-- **45 хв** - Dockerfile та базові K8s маніфести
-- **30 хв** - CI/CD pipeline
-- **15 хв** - Тестування та відлагодження
-- **20 хв** - Документація та фіналізація
+These instructions guide you through deploying the application to a local or remote Kubernetes cluster.
 
-## Критерії Успішного Виконання
+### Prerequisites
 
-### Мінімум для Проходження
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/your-username/your-repo-name.git
+    cd your-repo-name
+    ```
 
-- Додаток розгортається в Kubernetes
-- Ендпоінт `/redis` повертає коректну відповідь
-- Dockerfile працює та оптимізований
-- Існує базовий CI/CD pipeline
-- Документація дозволяє відтворити результат
+2.  **Set Environment Variables:**
+    Export the following environment variables in your shell. These will be used to configure the Kubernetes manifests and log in to your container registry.
 
-### Для Високої Оцінки Додатково
+    ```bash
+    export DOCKER_USERNAME="your-dockerhub-username"
+    export DOCKER_PASSWORD="your-dockerhub-password"
+    export REDIS_PASSWORD="your-super-secret-redis-password"
+    ```
 
-- Реалізовані security best practices
-- Додані моніторинг та автомасштабування
-- Код та інфраструктура добре документовані
-- Продумані питання продуктивності та відмовостійкості
+### Step 1: Build and Push the Docker Image
 
----
+1.  **Log in to Docker Hub:**
+    ```bash
+    echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
+    ```
 
-**Удачі!** Чекаємо ваше рішення протягом 2 годин після отримання завдання.
+2.  **Build and push the image:**
+    ```bash
+    docker build -t $DOCKER_USERNAME/test:latest .
+    docker push $DOCKER_USERNAME/test:latest
+    ```
+
+### Step 2: Configure and Deploy to Kubernetes
+
+1.  **Update Kubernetes Manifests:**
+    The following commands will replace the placeholder values in the Kubernetes manifest files with the environment variables you set earlier. The Redis password will be Base64-encoded as required by Kubernetes Secrets.
+
+    ```bash
+    # Update the image in the deployment
+    sed -i "s|image: YOUR_DOCKER_REGISTRY/test:latest|image: $DOCKER_USERNAME/test:latest|g" k8s/app.yml
+
+    # Update the Redis password in the secret manifest
+    BASE64_REDIS_PASSWORD=$(echo -n $REDIS_PASSWORD | base64)
+    sed -i "s/REDIS_PASSWORD: \"\"/REDIS_PASSWORD: $BASE64_REDIS_PASSWORD/g" k8s/secret.yml
+    ```
+
+2.  **Apply the manifests to your cluster:**
+    ```bash
+    kubectl apply -f k8s/
+    ```
+
+### Step 3: Verify the Deployment
+
+1.  **Check the status of your pods and services:**
+    ```bash
+    kubectl get pods
+    kubectl get services
+    ```
+    You should see the `nestjs-app` and `redis` pods in a `Running` state.
+
+2.  **Access the application:**
+    Once the application is running, you can access the `/redis` endpoint through the Ingress or by port-forwarding the service:
+    ```bash
+    kubectl port-forward svc/nestjs-app-service 8080:80
+    ```
+    Then, open a new terminal and run:
+    ```bash
+    curl http://localhost:8080/redis
