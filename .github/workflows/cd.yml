@@ -1,0 +1,25 @@
+name: Continuous Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Image tag to deploy'
+        required: true
+        default: 'latest'
+
+env:
+  IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/test
+
+jobs:
+  deploy_on_prem:
+    runs-on: self-hosted
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Update and Deploy to Kubernetes
+      run: |
+        sed -i "s|image: YOUR_DOCKER_REGISTRY/test:latest|image: $IMAGE_NAME:${{ github.event.inputs.image_tag }}|g" k8s/app.yml
+        sed -i "s/REDIS_PASSWORD: \"\"/REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}/g" k8s/secret.yml
+        kubectl apply -f k8s/

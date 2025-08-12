@@ -116,34 +116,45 @@ These instructions guide you through deploying the application to a local or rem
     
 ## CI/CD Setup (GitHub Actions)
 
-The CI/CD pipeline is defined in `.github/workflows/ci.yml` and automates the build, push, and deployment process. To make it operational, you need to configure GitHub Secrets and set up a self-hosted runner.
+The CI/CD process is split into two separate pipelines: **Continuous Integration (CI)** and **Continuous Deployment (CD)**.
 
-### Step 1: Set Up a Self-Hosted Runner
+### Continuous Integration (`.github/workflows/ci.yml`)
 
-The `deploy` job in the CI/CD pipeline is configured to run on a `self-hosted` runner. This is necessary because the pipeline needs access to your on-premises or private Kubernetes cluster to deploy the application.
+The CI pipeline automatically runs on every pull request submitted to the `main` branch. Its purpose is to build, test, and validate the code before it gets merged.
 
-You must set up a self-hosted runner in the environment where your Kubernetes cluster is accessible. For detailed instructions, follow the official GitHub documentation:
-- [Adding self-hosted runners](https://docs.github.com/en/actions/hosting-your-own-runners/adding-self-hosted-runners)
+**Workflow:**
+1.  **Trigger**: Automatically starts when a pull request is opened or updated against `main`.
+2.  **Build**: Builds a Docker image and tags it with `pr-` followed by the branch name (e.g., `your-username/test:pr-feature-branch`).
+3.  **Scan**: Performs a vulnerability scan on the newly built image using Trivy. If any `CRITICAL` or `HIGH` severity vulnerabilities are found, the pipeline fails.
+4.  **Push**: If the scan is successful, the PR-specific image is pushed to the container registry.
+5.  **Test**: A temporary Kubernetes cluster is created using KinD (Kubernetes in Docker), and the application is deployed using the PR-specific image tag. A test is run against the `/redis` endpoint to ensure basic functionality.
 
-Ensure the runner has `kubectl` installed and configured to access your cluster.
+This pipeline ensures that code merged into `main` has been successfully built and tested.
 
-### Step 2: Configure GitHub Secrets
+### Continuous Deployment (`.github/workflows/cd.yml`)
+
+The CD pipeline is responsible for deploying a validated image to the on-premises environment. This pipeline is **manually triggered**, giving you full control over when a new version is released.
+
+**Workflow:**
+1.  **Trigger**: Manually triggered from the GitHub Actions UI.
+2.  **Input**: Requires you to specify the **Image Tag** you wish to deploy (e.g., `pr-feature-branch`, `latest`, or a specific release tag).
+3.  **Deploy**: The pipeline runs on a self-hosted runner, which has access to the on-premises Kubernetes cluster. It updates the Kubernetes manifests with the specified image tag and applies them.
+
+### Setup Instructions
+
+#### Step 1: Configure GitHub Secrets
 
 Navigate to your GitHub repository's `Settings > Secrets and variables > Actions` and add the following secrets:
 
--   **`DOCKER_USERNAME`**: Your Docker Hub username. This is used to log in to Docker Hub and tag the image.
--   **`DOCKER_PASSWORD`**: Your Docker Hub password or an access token. This is used to authenticate with Docker Hub.
--   **`REDIS_PASSWORD`**: The password for your Redis instance, **in Base64**. The CI/CD pipeline will inject this directly into the Kubernetes Secret. You can generate the Base64 value with:
-    ```bash
-    echo -n 'your-super-secret-redis-password' | base64
-    ```
+-   **`DOCKER_USERNAME`**: Your Docker Hub username.
+-   **`DOCKER_PASSWORD`**: Your Docker Hub password or an access token.
+-   **`REDIS_PASSWORD`**: The password for your Redis instance.
 
-### How it Works
+#### Step 2: Set Up a Self-Hosted Runner
 
-The pipeline is triggered on every push to the `main` branch and consists of two jobs:
+The CD pipeline requires a `self-hosted` runner to deploy to your on-premises Kubernetes cluster.
 
-1.  **`build_and_push`**: This job builds the Docker image and pushes it to your Docker Hub registry.
-2.  **`deploy`**: This job runs on your self-hosted runner and performs the following actions:
-    -   It uses `sed` to replace the image placeholder in `k8s/app.yml` with the newly built image tag.
-    -   It uses `sed` to replace the `REDIS_PASSWORD` placeholder in `k8s/secret.yml` with the value from the GitHub secret.
-    -   It applies the updated Kubernetes manifests to your cluster using `kubectl apply`.
+You must set up a self-hosted runner in an environment where your Kubernetes cluster is accessible. For detailed instructions, follow the official GitHub documentation:
+- [Adding self-hosted runners](https://docs.github.com/en/actions/hosting-your-own-runners/adding-self-hosted-runners)
+
+Ensure the runner has `kubectl` installed and configured to access your cluster.
