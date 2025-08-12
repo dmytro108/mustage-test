@@ -24,7 +24,7 @@ jobs:
 
     - name: Build image
       run: |
-        docker build -t $IMAGE_NAME:pr-${{ steps.branch-name.outputs.current_branch }} .
+        docker build -t "$IMAGE_NAME:pr-${{ steps.branch-name.outputs.current_branch }}" .
 
     - name: Run Trivy vulnerability scanner
       uses: aquasecurity/trivy-action@master
