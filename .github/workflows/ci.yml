@@ -54,6 +54,7 @@ jobs:
     - name: Deploy to k8s
       run: |
         sed -i "s|image: YOUR_DOCKER_REGISTRY/test:latest|image: ${{ env.IMAGE_NAME }}:pr-${{ steps.branch-name.outputs.current_branch }}|g" k8s/app.yml
+        sed -i "s/REDIS_PASSWORD: \"\"/REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}/g" k8s/secret.yml
         kubectl apply -f k8s/
 
     - name: Test API endpoint
@@ -72,7 +73,7 @@ jobs:
         fi
 
         echo "Testing Ingress at IP: $INGRESS_IP"
-        response=$(curl -s "http://$INGRESS_IP/redis")
+        response=$(curl -sv "http://$INGRESS_IP/redis")
         if [ "$response" != '{"status":true}' ]; then
           echo "API test failed. Unexpected response: $response"
           exit 1
