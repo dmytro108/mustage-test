@@ -58,10 +58,21 @@ jobs:
 
     - name: Test API endpoint
       run: |
+        echo "Waiting for Ingress to be ready..."
         sleep 60
-        kubectl port-forward svc/nest-app 3000:3000 &
-        sleep 5
-        response=$(curl -s http://localhost:3000/redis)
+        INGRESS_IP=$(kubectl get ingress nestjs-app-ingress -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+        if [ -z "$INGRESS_IP" ]; then
+          echo "Failed to get Ingress IP. Trying Node IP..."
+          INGRESS_IP=$(kubectl get node -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+        fi
+        
+        if [ -z "$INGRESS_IP" ]; then
+          echo "Failed to get any IP."
+          exit 1
+        fi
+
+        echo "Testing Ingress at IP: $INGRESS_IP"
+        response=$(curl -s http://$INGRESS_IP/redis)
         if [ "$response" != '{"status":true}' ]; then
           echo "API test failed. Unexpected response: $response"
           exit 1
