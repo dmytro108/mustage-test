@@ -1,9 +1,18 @@
 name: Continuous Delivery
 
 on:
-  push:
-    branches:
-    - main
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment (e.g., default)"
+        required: false
+        default: "default"
+      rel_tag:
+        description: "Optional custom release tag (e.g., rel_v0.1.202501010000). Leave empty to auto-generate."
+        required: false
+      image_name:
+        description: "Override image name (default uses secrets.DOCKER_USERNAME/mustage-test)"
+        required: false
 
 permissions:
   contents: write
@@ -13,7 +22,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/mustage-test
+  IMAGE_NAME: ${{ inputs.image_name != '' && inputs.image_name || format('{0}/mustage-test', secrets.DOCKER_USERNAME) }}
 
 jobs:
   release:
@@ -32,11 +41,20 @@ jobs:
       id: version
       shell: bash
       run: |
-        DATE=$(date -u +'%Y%m%d%H%M')
-        echo "VERSION=v0.1.$DATE" >> "$GITHUB_ENV"
-        echo "REL_TAG=rel_v0.1.$DATE" >> "$GITHUB_ENV"
-        echo "version=v0.1.$DATE" >> "$GITHUB_OUTPUT"
-        echo "rel_tag=rel_v0.1.$DATE" >> "$GITHUB_OUTPUT"
+        set -euo pipefail
+        REL_INPUT="${{ inputs.rel_tag }}"
+        if [ -n "$REL_INPUT" ]; then
+          REL_TAG="$REL_INPUT"
+          VERSION="${REL_INPUT#rel_}"
+        else
+          DATE=$(date -u +'%Y%m%d%H%M')
+          VERSION="v0.1.$DATE"
+          REL_TAG="rel_${VERSION}"
+        fi
+        echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+        echo "REL_TAG=$REL_TAG" >> "$GITHUB_ENV"
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        echo "rel_tag=$REL_TAG" >> "$GITHUB_OUTPUT"
 
     - name: Create and push Git tag
       shell: bash
