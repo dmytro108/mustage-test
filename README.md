@@ -121,27 +121,75 @@ Required secrets: DOCKER_USERNAME, DOCKER_PASSWORD, REDIS_PASSWORD.
 
 ### Continuous Deployment (.github/workflows/cd.yml)
 
-Trigger: push to main.
+Trigger: manual via workflow_dispatch with optional inputs (environment, rel_tag, image_name).
 
 Release job (GitHub runner):
-- Derives version tag v0.1.YYYYMMDDHHMM and image tag rel_v0.1.YYYYMMDDHHMM
-- Creates and pushes git tag; checks out tagged commit
-- Builds and pushes image ${DOCKER_USERNAME}/mustage-test:${REL_TAG}
+- Computes VERSION v0.1.YYYYMMDDHHMM and REL_TAG rel_v0.1.YYYYMMDDHHMM if rel_tag is not provided
+- Creates and pushes immutable Git tag ${VERSION}; checks out the tag
+- Logs in to Docker Hub, builds and pushes ${IMAGE_NAME}:${REL_TAG}
 
-Deploy job (self-hosted):
-- Checks out the same release tag
-- Replaces image placeholder in k8s/app.yml with ${IMAGE_NAME}:${REL_TAG}
-- Injects base64 Redis Secret from REDIS_PASSWORD
-- Applies manifests and waits for rollouts
+Deploy job (self-hosted on-prem):
+- Checks out the same ${VERSION} tag
+- Replaces image in k8s/app.yml with ${IMAGE_NAME}:${REL_TAG}
+- Base64-encodes REDIS_PASSWORD into k8s/secret.yml
+- Applies k8s/secret.yml, k8s/redis.yml, k8s/app.yml; waits for redis and nestjs-app rollouts; prints kubectl get pods,svc,ingress
 
 Runner requirements:
-- Self-hosted runner with kubectl configured for the cluster
-- Docker installed for image builds not required on deploy job (build happens on GitHub runner)
+- Self-hosted runner with kubectl configured to your on-prem cluster context
+- Permissions to apply manifests; Docker not required on deploy job (build happens on GitHub runner)
 
 Configure repository secrets under Settings > Secrets and variables > Actions:
 - DOCKER_USERNAME
 - DOCKER_PASSWORD
 - REDIS_PASSWORD
+
+#### On-prem cluster prerequisite: Install an Ingress Controller
+
+Install ingress-nginx via Helm (recommended):
+```bash
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+
+```
+
+Wait for readiness and verify services:
+```bash
+kubectl wait --namespace ingress-nginx \
+  --for=condition=ready pod \
+  --selector=app.kubernetes.io/component=controller \
+  --timeout=180s
+
+kubectl get pods -n ingress-nginx
+kubectl get svc -n ingress-nginx
+```
+
+Notes:
+- If your cluster has no external LoadBalancer, expose the controller via NodePort or install MetalLB, and point your DNS (e.g., domain.tld) to a Node IP.
+- If your controller requires an explicit class, set spec.ingressClassName: nginx in k8s/app.yml.
+- 
+## How to Test the App
+
+After deployment, verify pods, services, and the /redis endpoint via Ingress. Ensure domain.tld resolves to your Ingress or Node IP, then run:
+```bash
+kubectl get pods ; echo
+kubectl get services ; echo
+curl http://domain.tld/redis ; echo
+```
+
+You should have the output similar to:
+```bash
+
+NAME                          READY   STATUS    RESTARTS    AGE
+nestjs-app-778758d88d-84vz4   1/1     Running   0          26m
+redis-5b459979d9-84fq2        1/1     Running   0          26m
+
+NAME                 TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE
+kubernetes           ClusterIP   10.96.0.1       <none>        443/TCP    41m
+nestjs-app-service   ClusterIP   10.96.80.42     <none>        80/TCP     26m
+redis                ClusterIP   10.109.195.50   <none>        6379/TCP   26m
+
+{"status":true,"message":"Redis connection is healthy"}
+
+```
 
 ## Kubernetes Manifests Overview
 
