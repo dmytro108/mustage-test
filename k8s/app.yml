@@ -20,7 +20,8 @@ spec:
         runAsNonRoot: true
       containers:
       - name: nestjs-app
-        image: YOUR_DOCKER_REGISTRY/test:latest
+        image: YOUR_DOCKER_REGISTRY/mustage-test:0.1.0
+        imagePullPolicy: IfNotPresent
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
