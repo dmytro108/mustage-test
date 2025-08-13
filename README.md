@@ -32,7 +32,7 @@ flowchart TB
       ing[Ingress: nestjs-app-ingress]
       svc[Service: nestjs-app-service]
       subgraph deploy[Deployment: nestjs-app]
-        pod[(Pod: nestjs-app)]
+        pod[Pod: nestjs-app]
       end
       cm[(ConfigMap: app-config)]
       sec[(Secret: app-secrets)]
