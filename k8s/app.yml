@@ -42,14 +42,18 @@ spec:
           httpGet:
             path: /redis
             port: 3000
-          initialDelaySeconds: 15
+          initialDelaySeconds: 30
           periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 3
         readinessProbe:
           httpGet:
             path: /redis
             port: 3000
-          initialDelaySeconds: 15
+          initialDelaySeconds: 30
           periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
 ---
 # k8s/app-service.yml
 apiVersion: v1
