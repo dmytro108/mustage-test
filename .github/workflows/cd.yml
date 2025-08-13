@@ -1,3 +1,9 @@
+# ============================================
+# CD Workflow: Tag source, build immutable image, and deploy to Kubernetes
+# Trigger: manual (workflow_dispatch) with optional inputs
+# Secrets used: DOCKER_USERNAME, DOCKER_PASSWORD, REDIS_PASSWORD
+# Notes: Release tag format rel_v0.1.YYYYMMDDHHMM if not provided
+# ============================================
 name: Continuous Delivery
 
 on:
@@ -25,6 +31,7 @@ env:
   IMAGE_NAME: ${{ inputs.image_name != '' && inputs.image_name || format('{0}/mustage-test', secrets.DOCKER_USERNAME) }}
 
 jobs:
+  # CD Job 1: Build, tag, and push image to registry
   release:
     name: Build, Tag, and Push Image (GitHub runner)
     runs-on: ubuntu-latest
@@ -37,6 +44,7 @@ jobs:
       with:
         fetch-depth: 0
 
+    # Compute VERSION/REL_TAG (auto when not provided via inputs)
     - name: Derive release version
       id: version
       shell: bash
@@ -56,6 +64,7 @@ jobs:
         echo "version=$VERSION" >> "$GITHUB_OUTPUT"
         echo "rel_tag=$REL_TAG" >> "$GITHUB_OUTPUT"
 
+    # Create immutable Git tag to freeze versioned release
     - name: Create and push Git tag
       shell: bash
       run: |
@@ -65,26 +74,31 @@ jobs:
         git tag "${VERSION}"
         git push origin "${VERSION}"
 
+    # Check out the code at the immutable release version
     - name: Checkout release tag
       shell: bash
       run: |
         git checkout "${VERSION}"
 
+    # Enable Buildx for efficient/advanced Docker builds
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
 
+    # Authenticate to Docker registry for push
     - name: Log in to Docker Hub
       uses: docker/login-action@v2
       with:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
 
+    # Build final image from release tag and push with release label
     - name: Build and push image
       shell: bash
       run: |
         docker build -t "${IMAGE_NAME}:${REL_TAG}" .
         docker push "${IMAGE_NAME}:${REL_TAG}"
 
+  # CD Job 2: Deploy release to Kubernetes (self-hosted runner)
   deploy:
     name: Deploy to Kubernetes (on-prem, self-hosted)
     runs-on: self-hosted
@@ -93,12 +107,14 @@ jobs:
       VERSION: ${{ needs.release.outputs.version }}
       REL_TAG: ${{ needs.release.outputs.rel_tag }}
     steps:
+    # Ensure correct code version is deployed (matches built image)
     - name: Checkout release tag
       uses: actions/checkout@v3
       with:
         ref: ${{ env.VERSION }}
         fetch-depth: 0
 
+    # Apply manifests, set image tag, and update Secrets with encoded Redis password
     - name: Deploy manifests
       shell: bash
       run: |

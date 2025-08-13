@@ -1,17 +1,29 @@
-# k8s/redis.yml
+# =========================================
+# Redis Manifests
+# - Deployment and Service for Redis
+# - Purpose: Provide an in-cluster Redis instance used by the NestJS app
+# - Apply with: kubectl apply -f k8s/redis.yml
+# =========================================
+
+# ---------------------------
+# Deployment: redis
+# ---------------------------
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: redis
+  labels:
+    app.kubernetes.io/name: redis
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: redis
+      app: redis # MUST match template.metadata.labels
   template:
     metadata:
       labels:
         app: redis
+        app.kubernetes.io/name: redis
     spec:
       containers:
       - name: redis
@@ -23,7 +35,7 @@ spec:
         - name: REDIS_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: app-secrets
+              name: app-secrets # See k8s/secret.yml for how to set REDIS_PASSWORD
               key: REDIS_PASSWORD
         resources:
           requests:
@@ -33,14 +45,19 @@ spec:
             cpu: "200m"
             memory: "200Mi"
 ---
+# ---------------------------
+# Service: redis
+# ---------------------------
 apiVersion: v1
 kind: Service
 metadata:
   name: redis
+  labels:
+    app.kubernetes.io/name: redis
 spec:
   selector:
-    app: redis
+    app: redis # Routes to Redis Pods
   ports:
   - protocol: TCP
-    port: 6379
-    targetPort: 6379
+    port: 6379 # Cluster-facing port
+    targetPort: 6379 # Redis container port

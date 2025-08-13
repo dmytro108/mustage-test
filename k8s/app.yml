@@ -1,37 +1,53 @@
-# k8s/app-deployment.yml
+# =========================================
+# NestJS Application Manifests
+# - Deployment, Service, Ingress, ConfigMap, HPA
+# - Purpose: Deploy the NestJS app that checks Redis connectivity
+# - Apply with: kubectl apply -f k8s/app.yml
+# =========================================
+
+# ---------------------------
+# Deployment: nestjs-app
+# ---------------------------
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: nestjs-app
+  labels:
+    app.kubernetes.io/name: nestjs-app # Standardized label for selectors and observability
 spec:
-  replicas: 1
+  replicas: 1 # HPA can scale this between minReplicas and maxReplicas below
   selector:
     matchLabels:
-      app: nestjs-app
+      app: nestjs-app # MUST match template.metadata.labels for the Deployment to manage Pods
   template:
     metadata:
       labels:
         app: nestjs-app
+        app.kubernetes.io/name: nestjs-app
     spec:
+      # Pod-level security context applies defaults to all containers
       securityContext:
-        runAsUser: 1001
-        runAsGroup: 1001
-        fsGroup: 1001
-        runAsNonRoot: true
+        runAsUser: 1001 # Non-root UID to satisfy security best practices
+        runAsGroup: 1001 # Primary GID
+        fsGroup: 1001 # Ensures mounted volumes get this group ownership
+        runAsNonRoot: true # Prevent container from starting as root
       containers:
       - name: nestjs-app
+        # Replace with the image pushed by CI/CD. Keeping IfNotPresent for local testing.
         image: YOUR_DOCKER_REGISTRY/mustage-test:0.1.0
         imagePullPolicy: IfNotPresent
         securityContext:
-          allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false # Block setuid/setgid escalations
+          readOnlyRootFilesystem: true # Requires the app to write only to mounted writable volumes (none here)
         ports:
-        - containerPort: 3000
+        - containerPort: 3000 # NestJS default HTTP port in this project
+        # Import application configuration and secrets as environment variables
         envFrom:
         - configMapRef:
-            name: app-config
+            name: app-config # Contains REDIS_HOST and REDIS_PORT
         - secretRef:
-            name: app-secrets
+            name: app-secrets # Contains REDIS_PASSWORD (also consumed by Redis)
+        # Baseline resource guarantees and caps
         resources:
           requests:
             cpu: "100m"
@@ -39,67 +55,88 @@ spec:
           limits:
             cpu: "200m"
             memory: "250Mi"
+        # LivenessProbe restarts the container if the process gets stuck
         livenessProbe:
           httpGet:
-            path: /redis
+            path: /redis # This endpoint returns "status": true|false
             port: 3000
-          initialDelaySeconds: 30
+          initialDelaySeconds: 30 # Increased to avoid false failures during cold starts (CI-adjusted)
           periodSeconds: 20
           timeoutSeconds: 5
           failureThreshold: 3
+        # ReadinessProbe gates traffic until the app is ready and Redis is reachable
         readinessProbe:
           httpGet:
             path: /redis
             port: 3000
-          initialDelaySeconds: 30
+          initialDelaySeconds: 30 # Align with liveness; tune based on cluster speed
           periodSeconds: 10
           timeoutSeconds: 5
           failureThreshold: 3
 ---
-# k8s/app-service.yml
+# ---------------------------
+# Service: nestjs-app-service
+# ---------------------------
 apiVersion: v1
 kind: Service
 metadata:
   name: nestjs-app-service
+  labels:
+    app.kubernetes.io/name: nestjs-app
 spec:
   selector:
-    app: nestjs-app
+    app: nestjs-app # Routes to Pods with this label
   ports:
   - protocol: TCP
-    port: 80
-    targetPort: 3000
+    port: 80 # Cluster-facing port
+    targetPort: 3000 # Container port exposed by the app
 ---
-# k8s/app-ingress.yml
+# ---------------------------
+# Ingress: nestjs-app-ingress
+# ---------------------------
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: nestjs-app-ingress
+  # If using a specific controller (e.g., NGINX), you may need an ingressClassName or annotations, for example:
+  # annotations:
+  #   nginx.ingress.kubernetes.io/rewrite-target: /
 spec:
+  # ingressClassName: nginx
   rules:
   - http:
       paths:
       - path: /
-        pathType: Prefix
+        pathType: Prefix # Matches all subpaths, e.g., /redis
         backend:
           service:
             name: nestjs-app-service
             port:
               number: 80
 ---
-# k8s/app-config.yml
+# ---------------------------
+# ConfigMap: app-config
+# ---------------------------
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: app-config
+  labels:
+    app.kubernetes.io/name: nestjs-app
 data:
+  # Hostname and port of the Redis Service inside the cluster
   REDIS_HOST: "redis"
   REDIS_PORT: "6379"
 ---
-# k8s/app-hpa.yml
+# ---------------------------
+# HorizontalPodAutoscaler: nestjs-app-hpa
+# ---------------------------
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: nestjs-app-hpa
+  labels:
+    app.kubernetes.io/name: nestjs-app
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
@@ -107,10 +144,11 @@ spec:
     name: nestjs-app
   minReplicas: 1
   maxReplicas: 5
+  # Scale on average CPU utilization across pods
   metrics:
   - type: Resource
     resource:
       name: cpu
       target:
         type: Utilization
-        averageUtilization: 80
+        averageUtilization: 80 # Target average CPU usage per pod before scaling up

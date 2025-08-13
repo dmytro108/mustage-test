@@ -1,3 +1,9 @@
+# ============================================
+# CI Workflow: Build, scan, push PR image and run smoke tests on a Kind cluster via Ingress
+# Triggers: pull_request on main
+# Secrets used: DOCKER_USERNAME, DOCKER_PASSWORD, REDIS_PASSWORD
+# Notes: Ingress readiness waits added; /redis must return '"status":true'
+# ============================================
 name: Continuous Integration
 
 on:
@@ -14,6 +20,7 @@ env:
   PR_TAG: pr-${{ github.event.number }}
 
 jobs:
+  # CI Job 1: Build, scan, and push PR-tagged image
   build_image:
     name: Build Image, Compliance and Push
     runs-on: ubuntu-latest
@@ -23,13 +30,16 @@ jobs:
       with:
         fetch-depth: 0
 
+    # Enable Buildx for advanced Docker builds (cache/multi-platform)
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
 
+    # Build the image tagged with PR number for isolation (pr-*)
     - name: Build image
       run: |
         docker build -t "${{ env.IMAGE_NAME }}:${{ env.PR_TAG }}" .
 
+    # Security gate: fail build on HIGH/CRITICAL vulns (ignores unfixed)
     - name: Run Trivy vulnerability scanner
       uses: aquasecurity/trivy-action@master
       with:
@@ -40,6 +50,7 @@ jobs:
         vuln-type: 'os,library'
         severity: 'CRITICAL,HIGH'
 
+    # Required to push the PR-tagged image
     - name: Log in to Docker Hub
       if: success()
       uses: docker/login-action@v2
@@ -47,37 +58,45 @@ jobs:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
 
+    # Publish PR image so the Kind cluster can pull it
     - name: Push image to registry
       if: success()
       run: |
         docker push ${{ env.IMAGE_NAME }}:${{ env.PR_TAG }}
 
+  # CI Job 2: Provision Kind + Ingress and run smoke tests via /redis
   deploy_for_tests:
     name: Smoke Tests
     runs-on: ubuntu-latest
     needs: build_image
     steps:
+    # Spin up ephemeral Kubernetes cluster (Kind) for smoke tests
     - name: Create k8s Kind Cluster
       uses: helm/kind-action@v1.5.0
 
+    # Install and explicitly wait for ingress-nginx readiness to avoid flakes
     - name: Install Ingress Controller
       run: |
         kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
 
-        # Wait for Ingress Controller to be fully ready
+        # Wait for Ingress Controller to be fully ready (pod Ready condition)
+        # Why: Ensures the nginx controller pod is created, containers started,
+        # readiness probes passing, and the controller is serving traffic internally.
+        # This does NOT by itself guarantee the admission webhook Service is reachable yet.
+
         echo "=== Waiting for Ingress Controller to be ready ==="
         kubectl wait --namespace ingress-nginx \
           --for=condition=ready pod \
           --selector=app.kubernetes.io/component=controller \
           --timeout=120s
 
-        # Wait for admission webhook to be available
+        # Wait for admission webhook/controller Deployment availability        
         echo "=== Waiting for Ingress admission webhook ==="
         kubectl wait --namespace ingress-nginx \
           --for=condition=available deployment/ingress-nginx-controller \
           --timeout=120s
 
-        # Additional wait for webhook service to be fully ready
+        # Extra stabilization buffer
         echo "=== Additional wait for webhook service stability ==="
         sleep 20
 
@@ -86,6 +105,7 @@ jobs:
       with:
         fetch-depth: 0
 
+    # Apply manifests and wire image + secrets specific to this PR run
     - name: Deploy to k8s
       run: |
         # Fix image reference
@@ -111,12 +131,16 @@ jobs:
         kubectl wait --for=condition=ready pod -l app=redis --timeout=60s
         kubectl wait --for=condition=ready pod -l app=nestjs-app --timeout=120s
 
+    # Smoke test via Ingress with retries and rich diagnostics on failure
     - name: Test API endpoint
       run: |
         echo "=== Checking Ingress status ==="
         kubectl describe ingress nestjs-app-ingress
 
-        # Wait longer for Ingress to get an IP
+        # Allow time for the Ingress to be admitted and NGINX to load the config
+        # Note: On Kind there is no external LoadBalancer; .status.loadBalancer may remain empty.
+        # We later fall back to the node IP or localhost. This delay also gives NGINX time to
+        # reconcile the new Ingress resource and start routing traffic.
         echo "Waiting for Ingress to be ready..."
         sleep 30
 
