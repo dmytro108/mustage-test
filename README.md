@@ -28,19 +28,19 @@ flowchart TB
   user[Client]
 
   subgraph k8s[Kubernetes Cluster]
-    subgraph ns[Namespace]
-      ing[Ingress: nestjs-app-ingress]
-      svc[Service: nestjs-app-service]
+    subgraph ns[default]
+      ing[**Ingress**: nestjs-app-ingress]
+      svc[**Service**: nestjs-app-service]
       subgraph deploy[Deployment: nestjs-app]
-        pod[Pod: nestjs-app]
+        pod[**Pod**: nestjs-app]
       end
-      cm[(ConfigMap: app-config)]
-      sec[(Secret: app-secrets)]
-      hpa[HPA: nestjs-app-hpa]
+      cm[(**ConfigMap**: app-config)]
+      sec[(**Secret**: app-secrets)]
+      hpa[**HPA**: nestjs-app-hpa]
 
-      rsvc[Service: redis]
+      rsvc[**Service**: redis]
       subgraph rdeploy[Deployment: redis]
-        rpod[(Pod: redis)]
+        rpod[(**Pod**: redis)]
       end
     end
   end
