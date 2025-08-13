@@ -79,10 +79,6 @@ jobs:
         echo "=== Additional wait for webhook service stability ==="
         sleep 20
 
-    - name: Load image into Kind
-      run: |
-        kind load docker-image "${{ env.IMAGE_NAME }}:${{ env.PR_TAG }}"
-
     - name: Deploy to k8s
       run: |
         # Fix image reference
