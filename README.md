@@ -170,26 +170,12 @@ Notes:
 
 After deployment, verify pods, services, and the /redis endpoint via Ingress. Ensure domain.tld resolves to your Ingress or Node IP, then run:
 ```bash
-kubectl get pods ; echo
-kubectl get services ; echo
-curl http://domain.tld/redis ; echo
+kubectl get pods 
+kubectl get services 
+curl http://domain.tld/redis 
 ```
 
-You should have the output similar to:
-```bash
-
-NAME                          READY   STATUS    RESTARTS    AGE
-nestjs-app-778758d88d-84vz4   1/1     Running   0          26m
-redis-5b459979d9-84fq2        1/1     Running   0          26m
-
-NAME                 TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE
-kubernetes           ClusterIP   10.96.0.1       <none>        443/TCP    41m
-nestjs-app-service   ClusterIP   10.96.80.42     <none>        80/TCP     26m
-redis                ClusterIP   10.109.195.50   <none>        6379/TCP   26m
-
-{"status":true,"message":"Redis connection is healthy"}
-
-```
+![](./screen.gif)
 
 ## Kubernetes Manifests Overview
 
