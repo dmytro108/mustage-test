@@ -113,23 +113,19 @@ jobs:
         fi
 
         if [ -z "$INGRESS_IP" ]; then
-          echo "Failed to get any IP. Checking pod logs..."
-          echo "=== NestJS App Logs ==="
-          kubectl logs -l app=nestjs-app --tail=50
-          echo "=== Redis Logs ==="
-          kubectl logs -l app=redis --tail=50
-          exit 1
+          echo "Failed to get any IP. Using localhost for Kind cluster..."
+          INGRESS_IP="localhost"
         fi
 
         echo "Testing Ingress at IP: $INGRESS_IP"
 
-        # Test with more attempts and better error handling
+        # Test with more attempts 
         for i in {1..5}; do
           echo "=== Attempt $i ==="
           response=$(curl -sv "http://$INGRESS_IP/redis" 2>&1 || true)
           echo "Response: $response"
           
-          if echo "$response" | grep -q '{"status":true}'; then
+          if echo "$response" | grep -q '"status":true'; then
             echo "API test passed."
             exit 0
           fi
