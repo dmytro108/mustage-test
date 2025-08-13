@@ -10,7 +10,8 @@ env:
   PR_TAG: pr-${{ github.event.number }}
 
 jobs:
-  build_scan_and_test:
+  build_image:
+    name: Build Docker Image
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
@@ -23,6 +24,11 @@ jobs:
       run: |
         docker build -t "${{ env.IMAGE_NAME }}:${{ env.PR_TAG }}" .
 
+  compliance_check:
+    name: Run Compliance Checks
+    runs-on: ubuntu-latest
+    needs: build_image
+    steps:
     - name: Run Trivy vulnerability scanner
       uses: aquasecurity/trivy-action@master
       with:
@@ -33,6 +39,11 @@ jobs:
         vuln-type: 'os,library'
         severity: 'CRITICAL,HIGH'
 
+  deploy_for_tests:
+    name: Deploy for Tests
+    runs-on: ubuntu-latest
+    needs: compliance_check
+    steps:
     - name: Create k8s Kind Cluster
       uses: helm/kind-action@v1.5.0
 
@@ -60,6 +71,7 @@ jobs:
     - name: Load image into Kind
       run: |
         kind load docker-image "${{ env.IMAGE_NAME }}:${{ env.PR_TAG }}"
+
     - name: Deploy to k8s
       run: |
         # Fix image reference
@@ -85,6 +97,11 @@ jobs:
         kubectl wait --for=condition=ready pod -l app=redis --timeout=60s
         kubectl wait --for=condition=ready pod -l app=nestjs-app --timeout=120s
 
+  smoke_test:
+    name: Smoke Test
+    runs-on: ubuntu-latest
+    needs: deploy_for_tests
+    steps:
     - name: Test API endpoint
       run: |
         echo "=== Checking Ingress status ==="
@@ -107,7 +124,7 @@ jobs:
 
         echo "Testing Ingress at IP: $INGRESS_IP"
 
-        # Test with more attempts 
+        # Test with more attempts
         for i in {1..5}; do
           echo "=== Attempt $i ==="
           response=$(curl -sv "http://$INGRESS_IP/redis" 2>&1 || true)
@@ -137,6 +154,11 @@ jobs:
         kubectl get events --sort-by=.metadata.creationTimestamp
         exit 1
 
+  push_image:
+    name: Push Image to Registry
+    runs-on: ubuntu-latest
+    needs: smoke_test
+    steps:
     - name: Log in to Docker Hub
       if: success()
       uses: docker/login-action@v2
