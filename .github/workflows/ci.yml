@@ -79,6 +79,9 @@ jobs:
         echo "=== Additional wait for webhook service stability ==="
         sleep 20
 
+    - name: Checkout code
+      uses: actions/checkout@v3
+
     - name: Deploy to k8s
       run: |
         # Fix image reference
