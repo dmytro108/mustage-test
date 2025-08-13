@@ -16,8 +16,12 @@ env:
   IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/mustage-test
 
 jobs:
-  release_and_deploy:
-    runs-on: self-hosted
+  release:
+    name: Build, Tag, and Push Image (GitHub runner)
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      rel_tag: ${{ steps.version.outputs.rel_tag }}
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
@@ -29,7 +33,6 @@ jobs:
       shell: bash
       run: |
         DATE=$(date -u +'%Y%m%d%H%M')
-        echo "DATE=$DATE" >> "$GITHUB_ENV"
         echo "VERSION=v0.1.$DATE" >> "$GITHUB_ENV"
         echo "REL_TAG=rel_v0.1.$DATE" >> "$GITHUB_ENV"
         echo "version=v0.1.$DATE" >> "$GITHUB_OUTPUT"
@@ -38,6 +41,7 @@ jobs:
     - name: Create and push Git tag
       shell: bash
       run: |
+        set -e
         git config user.name "github-actions[bot]"
         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
         git tag "${VERSION}"
@@ -63,14 +67,28 @@ jobs:
         docker build -t "${IMAGE_NAME}:${REL_TAG}" .
         docker push "${IMAGE_NAME}:${REL_TAG}"
 
-    - name: Deploy to Kubernetes (on-prem)
+  deploy:
+    name: Deploy to Kubernetes (on-prem, self-hosted)
+    runs-on: self-hosted
+    needs: release
+    env:
+      VERSION: ${{ needs.release.outputs.version }}
+      REL_TAG: ${{ needs.release.outputs.rel_tag }}
+    steps:
+    - name: Checkout release tag
+      uses: actions/checkout@v3
+      with:
+        ref: ${{ env.VERSION }}
+        fetch-depth: 0
+
+    - name: Deploy manifests
       shell: bash
       run: |
         set -euo pipefail
-        echo "Patching image to ${IMAGE_NAME}:${REL_TAG}"
+        echo "Using image ${IMAGE_NAME}:${REL_TAG}"
         sed -i "s|image: YOUR_DOCKER_REGISTRY/mustage-test:0.1.0|image: ${IMAGE_NAME}:${REL_TAG}|g" k8s/app.yml
 
-        echo "Encoding Redis password from secret and patching Secret manifest"
+        echo "Encoding Redis password and updating Secret manifest"
         REDIS_PASSWORD_B64=$(echo -n "${{ secrets.REDIS_PASSWORD }}" | base64 -w 0)
         sed -i "s/REDIS_PASSWORD: \"\"/REDIS_PASSWORD: $REDIS_PASSWORD_B64/g" k8s/secret.yml
 
