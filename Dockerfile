@@ -23,7 +23,7 @@ FROM node:22-alpine
 WORKDIR /usr/src/app
 
 # Create a non-root user with specific UID/GID to match Kubernetes securityContext
-RUN addgroup -g 1000 -S appgroup && adduser -u 1000 -S appuser -G appgroup
+RUN addgroup -g 1000 -S appgroup && adduser -u 1000 -S -D -h /home/appuser -G appgroup appuser
 
 # Copy built assets from the build stage
 COPY --from=build /usr/src/app/dist ./dist
