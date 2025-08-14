@@ -27,7 +27,7 @@ jobs:
   # - Save human-readable logs as artifacts for debugging
   # Notes:
   # - Uses npm cache to speed up installs
-  # - Uses xt0rted/eslint-problem-matcher for annotations
+  # - Uses a local ESLint problem matcher for annotations
   # ------------------------------------------------------------
   lint:
     name: Lint (ESLint with annotations)
@@ -45,12 +45,18 @@ jobs:
         node-version: '22'
         cache: 'npm'
 
-    # Add ESLint problem matcher so GitHub annotates warnings/errors inline
+    # Register local ESLint problem matcher so GitHub annotates warnings/errors inline (no external action)
     - name: Register ESLint problem matcher
-      uses: xt0rted/eslint-problem-matcher@v2
+      run: echo "::add-matcher::.github/eslint-problem-matcher.json"
 
     - name: Install dependencies
       run: npm ci
+
+    - name: Print tool versions
+      run: |
+        node -v
+        npm -v
+        ./node_modules/.bin/eslint -v
 
     # Use CI formatter and tee output into an artifact for later inspection
     - name: Run ESLint
