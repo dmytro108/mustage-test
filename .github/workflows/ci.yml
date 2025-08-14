@@ -20,9 +20,120 @@ env:
   PR_TAG: pr-${{ github.event.number }}
 
 jobs:
+  # ------------------------------------------------------------
+  # CI Job 0a: Lint (runs in parallel with unit tests)
+  # Purpose:
+  # - Run ESLint with a problem matcher so GitHub annotates PRs
+  # - Save human-readable logs as artifacts for debugging
+  # Notes:
+  # - Uses npm cache to speed up installs
+  # - Uses xt0rted/eslint-problem-matcher for annotations
+  # ------------------------------------------------------------
+  lint:
+    name: Lint (ESLint with annotations)
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    # Install Node and enable npm cache to speed up installs
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: 'npm'
+
+    # Add ESLint problem matcher so GitHub annotates warnings/errors inline
+    - name: Register ESLint problem matcher
+      uses: xt0rted/eslint-problem-matcher@v2
+
+    - name: Install dependencies
+      run: npm ci
+
+    # Use CI formatter and tee output into an artifact for later inspection
+    - name: Run ESLint
+      run: |
+        mkdir -p reports/eslint
+        npm run -s lint:ci | tee reports/eslint/eslint.log
+
+    - name: Upload ESLint report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: eslint-report
+        path: reports/eslint
+
+  # ------------------------------------------------------------
+  # CI Job 0b: Unit Tests (runs in parallel with lint)
+  # Purpose:
+  # - Run Jest unit tests in CI mode
+  # - Produce JUnit XML and coverage for reporting in GitHub UI
+  # Notes:
+  # - mikepenz/action-junit-report publishes a Check with annotations
+  # - Artifacts include coverage and junit xml for traceability
+  # ------------------------------------------------------------
+  unit_tests:
+    name: Unit Tests (Jest + JUnit)
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    # Run Jest in CI mode with JUnit output for rich reporting
+    - name: Run Jest
+      run: |
+        # Ensure destination directory for JUnit report exists (jest-junit writes here)
+        mkdir -p reports/junit
+        npm run -s test:ci
+
+    # Publish JUnit as a GitHub Check with annotations and a summary
+    - name: Publish Test Report
+      if: always()
+      uses: mikepenz/action-junit-report@v4
+      with:
+        report_paths: 'reports/junit/*.xml'
+        check_name: 'Unit Test Report'
+        require_tests: true
+        fail_on_failure: true
+
+    # Render coverage summary into the job summary and a markdown file for traceability
+    - name: Publish Coverage Summary
+      if: always()
+      uses: irongut/CodeCoverageSummary@v1.3.0
+      with:
+        filenames: coverage/lcov.info
+        badge: true
+        format: markdown
+        output: both
+
+    - name: Upload coverage and reports
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: unit-test-artifacts
+        path: |
+          coverage
+          reports/junit
+          code-coverage-results.md
+
   # CI Job 1: Build, scan, and push PR-tagged image
   build_image:
     name: Build Image, Compliance and Push
+    # Gate image build on successful lint and unit tests
+    needs: [ lint, unit_tests ]
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
